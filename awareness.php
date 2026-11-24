@@ -1,8 +1,8 @@
 <?php require 'config.php';login_required();
 $topics=q("SELECT * FROM topics ORDER BY id")->fetchAll();$tid=(int)($_GET['topic']??0);$s=trim($_GET['s']??'');
-$sql="SELECT c.*,t.name topic FROM content c JOIN topics t ON t.id=c.topic_id WHERE 1";$a=[];
+$sql="SELECT c.*,t.name topic FROM content c JOIN topics t ON t.id=c.topic_id WHERE TRUE";$a=[];
 if($tid){$sql.=" AND c.topic_id=?";$a[]=$tid;}
-if($s!==''){$sql.=" AND (c.title LIKE ? OR c.body LIKE ?)";$a[]="%$s%";$a[]="%$s%";}
+if($s!==''){$sql.=" AND (c.title ILIKE ? OR c.body ILIKE ?)";$a[]="%$s%";$a[]="%$s%";}
 $rows=q($sql." ORDER BY c.id DESC",$a)->fetchAll();
 $title='Awareness';include 'includes/header.php'; ?>
 <h1>Cybersecurity awareness</h1>

@@ -1,60 +1,54 @@
-CREATE DATABASE IF NOT EXISTS cyberaware CHARACTER SET utf8mb4;
-USE cyberaware;
-SET FOREIGN_KEY_CHECKS=0;
-DROP TABLE IF EXISTS otp_codes, quiz_attempts, questions, content, topics, notifications, incident_updates, attachments, incidents, incident_types, labs, users;
-SET FOREIGN_KEY_CHECKS=1;
+-- PostgreSQL schema. The Docker container runs this automatically the first time it starts
+-- (only when the users table does not exist yet). To reset everything, run it by hand with psql.
+DROP TABLE IF EXISTS otp_codes, quiz_attempts, questions, content, topics, notifications, incident_updates, attachments, incidents, incident_types, labs, users CASCADE;
 
 CREATE TABLE users(
- id INT AUTO_INCREMENT PRIMARY KEY,
+ id SERIAL PRIMARY KEY,
  username VARCHAR(40) NOT NULL UNIQUE,   -- student or staff ID
  full_name VARCHAR(100) NOT NULL,
  email VARCHAR(100) NOT NULL UNIQUE,     -- used for one-time passwords and password reset
  password_hash VARCHAR(255) NOT NULL,
- role ENUM('student','staff','technician','admin') NOT NULL DEFAULT 'student',
- created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+ role VARCHAR(20) NOT NULL DEFAULT 'student' CHECK (role IN ('student','staff','technician','admin')),
+ created_at TIMESTAMP(0) DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE otp_codes(
- id INT AUTO_INCREMENT PRIMARY KEY,
- user_id INT NOT NULL,
- purpose ENUM('login','reset') NOT NULL,
+ id SERIAL PRIMARY KEY,
+ user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ purpose VARCHAR(10) NOT NULL CHECK (purpose IN ('login','reset')),
  code_hash VARCHAR(255) NOT NULL,
- expires_at DATETIME NOT NULL,
- attempts TINYINT DEFAULT 0,
- used TINYINT DEFAULT 0,
- FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+ expires_at TIMESTAMP(0) NOT NULL,
+ attempts SMALLINT DEFAULT 0,
+ used SMALLINT DEFAULT 0
 );
-CREATE TABLE labs(id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(80) NOT NULL);
-CREATE TABLE incident_types(id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL, weight TINYINT NOT NULL DEFAULT 1);
+CREATE TABLE labs(id SERIAL PRIMARY KEY, name VARCHAR(80) NOT NULL);
+CREATE TABLE incident_types(id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, weight SMALLINT NOT NULL DEFAULT 1);
 CREATE TABLE incidents(
- id INT AUTO_INCREMENT PRIMARY KEY,
+ id SERIAL PRIMARY KEY,
  ref VARCHAR(12),
- reporter_id INT NOT NULL,
- incident_type_id INT NOT NULL,
- lab_id INT NOT NULL,
+ reporter_id INT NOT NULL REFERENCES users(id),
+ incident_type_id INT NOT NULL REFERENCES incident_types(id),
+ lab_id INT NOT NULL REFERENCES labs(id),
  device_id VARCHAR(60) DEFAULT '',
  gadget VARCHAR(40) DEFAULT '',
- occurred_at DATETIME,
+ occurred_at TIMESTAMP(0),
  description TEXT NOT NULL,
  people_affected INT DEFAULT 1,
  impact TEXT,
- severity ENUM('Low','Medium','High','Critical') DEFAULT 'Low',
- status ENUM('Reported','Received by Admin','Assigned to Technician','In Progress','Handled') DEFAULT 'Reported',
- assigned_to INT NULL,
- escalated TINYINT DEFAULT 0,
- created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
- acknowledged_at DATETIME NULL,
- resolved_at DATETIME NULL,
- FOREIGN KEY(reporter_id) REFERENCES users(id),
- FOREIGN KEY(incident_type_id) REFERENCES incident_types(id),
- FOREIGN KEY(lab_id) REFERENCES labs(id)
+ severity VARCHAR(10) DEFAULT 'Low' CHECK (severity IN ('Low','Medium','High','Critical')),
+ status VARCHAR(30) DEFAULT 'Reported' CHECK (status IN ('Reported','Received by Admin','Assigned to Technician','In Progress','Handled')),
+ assigned_to INT NULL REFERENCES users(id),
+ escalated SMALLINT DEFAULT 0,
+ created_at TIMESTAMP(0) DEFAULT CURRENT_TIMESTAMP,
+ acknowledged_at TIMESTAMP(0) NULL,
+ resolved_at TIMESTAMP(0) NULL
 );
-CREATE TABLE attachments(id INT AUTO_INCREMENT PRIMARY KEY, incident_id INT NOT NULL, filename VARCHAR(100), original VARCHAR(150), FOREIGN KEY(incident_id) REFERENCES incidents(id) ON DELETE CASCADE);
-CREATE TABLE incident_updates(id INT AUTO_INCREMENT PRIMARY KEY, incident_id INT NOT NULL, user_id INT NOT NULL, status VARCHAR(30), note TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(incident_id) REFERENCES incidents(id) ON DELETE CASCADE);
-CREATE TABLE notifications(id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, message VARCHAR(255), link VARCHAR(120), is_read TINYINT DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE topics(id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL);
-CREATE TABLE content(id INT AUTO_INCREMENT PRIMARY KEY, topic_id INT NOT NULL, title VARCHAR(150) NOT NULL, type ENUM('tip','video','poster','faq','guide') NOT NULL, body TEXT, media VARCHAR(255) DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(topic_id) REFERENCES topics(id));
-CREATE TABLE questions(id INT AUTO_INCREMENT PRIMARY KEY, topic_id INT NOT NULL, question VARCHAR(255) NOT NULL, a VARCHAR(150), b VARCHAR(150), c VARCHAR(150), d VARCHAR(150), correct CHAR(1) NOT NULL, explanation VARCHAR(255), FOREIGN KEY(topic_id) REFERENCES topics(id));
-CREATE TABLE quiz_attempts(id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, topic_id INT NOT NULL, score INT, total INT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE attachments(id SERIAL PRIMARY KEY, incident_id INT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE, filename VARCHAR(100), original VARCHAR(150));
+CREATE TABLE incident_updates(id SERIAL PRIMARY KEY, incident_id INT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE, user_id INT NOT NULL REFERENCES users(id), status VARCHAR(30), note TEXT, created_at TIMESTAMP(0) DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE notifications(id SERIAL PRIMARY KEY, user_id INT NOT NULL, message VARCHAR(255), link VARCHAR(120), is_read SMALLINT DEFAULT 0, created_at TIMESTAMP(0) DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE topics(id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL);
+CREATE TABLE content(id SERIAL PRIMARY KEY, topic_id INT NOT NULL REFERENCES topics(id), title VARCHAR(150) NOT NULL, type VARCHAR(10) NOT NULL CHECK (type IN ('tip','video','poster','faq','guide')), body TEXT, media VARCHAR(255) DEFAULT '', created_at TIMESTAMP(0) DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE questions(id SERIAL PRIMARY KEY, topic_id INT NOT NULL REFERENCES topics(id), question VARCHAR(255) NOT NULL, a VARCHAR(150), b VARCHAR(150), c VARCHAR(150), d VARCHAR(150), correct CHAR(1) NOT NULL, explanation VARCHAR(255));
+CREATE TABLE quiz_attempts(id SERIAL PRIMARY KEY, user_id INT NOT NULL, topic_id INT NOT NULL, score INT, total INT, created_at TIMESTAMP(0) DEFAULT CURRENT_TIMESTAMP);
 
 INSERT INTO labs(name) VALUES('Computer Lab 1'),('Computer Lab 2'),('Computer Lab 3'),('Computer Lab 4'),('ODeL / e-Learning Unit');
 INSERT INTO incident_types(name,weight) VALUES

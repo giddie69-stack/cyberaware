@@ -18,7 +18,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     }
   }elseif($a==='update'&&is_tech()&&$i['assigned_to']==$u['id']){
     $st=in_array($_POST['status'],['In Progress','Handled'])?$_POST['status']:'In Progress';
-    q("UPDATE incidents SET status=?,severity=?,resolved_at=IF(?='Handled',NOW(),NULL) WHERE id=?",[$st,$sv,$st,$i['id']]);
+    q("UPDATE incidents SET status=?,severity=?,resolved_at=CASE WHEN ?::text='Handled' THEN NOW() END WHERE id=?",[$st,$sv,$st,$i['id']]);
     log_update($i['id'],$u['id'],$st,$note!==''?$note:($st==='Handled'?'Case handled':'Work started'));
     if($st==='Handled'){notify($i['reporter_id'],"{$i['ref']} has been handled by the technician",$link);notify_role(['admin'],"{$i['ref']} was handled by {$u['full_name']}",$link);flash('Case marked as handled. The reporter and admin have been told.');}
     else{notify($i['reporter_id'],"{$i['ref']}: the technician is working on it",$link);flash('Status updated.');}

@@ -2,9 +2,9 @@
 if(is_admin())run_escalation();
 $title='Home';include 'includes/header.php';
 $first=h(explode(' ',$u['full_name'])[0]);
-$sel="SELECT i.*,t.name type,l.name lab,r.full_name reporter,a.full_name tech,TIMESTAMPDIFF(MINUTE,i.created_at,NOW()) mins FROM incidents i JOIN incident_types t ON t.id=i.incident_type_id JOIN labs l ON l.id=i.lab_id JOIN users r ON r.id=i.reporter_id LEFT JOIN users a ON a.id=i.assigned_to";
+$sel="SELECT i.*,t.name type,l.name lab,r.full_name reporter,a.full_name tech,FLOOR(EXTRACT(EPOCH FROM NOW()-i.created_at)/60)::int mins FROM incidents i JOIN incident_types t ON t.id=i.incident_type_id JOIN labs l ON l.id=i.lab_id JOIN users r ON r.id=i.reporter_id LEFT JOIN users a ON a.id=i.assigned_to";
 if(is_admin()):
-  $rows=q("$sel ORDER BY (i.status='Handled'),FIELD(i.severity,'Critical','High','Medium','Low'),i.created_at LIMIT 150")->fetchAll();
+  $rows=q("$sel ORDER BY (i.status='Handled'),array_position(ARRAY['Critical','High','Medium','Low'],i.severity::text),i.created_at LIMIT 150")->fetchAll();
   $techs=q("SELECT id,full_name FROM users WHERE role='technician' ORDER BY full_name")->fetchAll();
   $new=count(array_filter($rows,fn($r)=>$r['assigned_to']===null&&$r['status']!=='Handled'));$pend=count(array_filter($rows,fn($r)=>$r['assigned_to']!==null&&$r['status']!=='Handled'));$done=count(array_filter($rows,fn($r)=>$r['status']==='Handled')); ?>
 <section class="hero"><h1>Hello, <?=$first?></h1><p>These are the incidents reported in the computer laboratories. Assign each case to a technician and follow it until it is handled.</p></section>
@@ -19,7 +19,7 @@ if(is_admin()):
 <?php endforeach; if(!$rows): ?><tr><td colspan="9">No incidents reported yet.</td></tr><?php endif; ?></table></div>
 <p class="muted"><span class="dot red"></span> pending &nbsp; <span class="dot green"></span> handled by the technician</p>
 <?php elseif(is_tech()):
-  $rows=q("$sel WHERE i.assigned_to=? ORDER BY (i.status='Handled'),FIELD(i.severity,'Critical','High','Medium','Low'),i.created_at",[$u['id']])->fetchAll();
+  $rows=q("$sel WHERE i.assigned_to=? ORDER BY (i.status='Handled'),array_position(ARRAY['Critical','High','Medium','Low'],i.severity::text),i.created_at",[$u['id']])->fetchAll();
   $pend=count(array_filter($rows,fn($r)=>$r['status']!=='Handled')); ?>
 <section class="hero"><h1>Hello, <?=$first?></h1><p>Cases the admin has assigned to you appear here. Open a case, work on it and mark it as handled.</p></section>
 <div class="grid"><div class="panel"><p class="stat bad"><?=$pend?></p>pending your action</div><div class="panel"><p class="stat ok"><?=count($rows)-$pend?></p>handled by you</div></div>
@@ -29,7 +29,7 @@ if(is_admin()):
 <?php endforeach; if(!$rows): ?><tr><td colspan="8">Nothing assigned to you yet.</td></tr><?php endif; ?></table></div>
 <?php else:
   $mine=q("SELECT i.id,i.ref,i.status,t.name type FROM incidents i JOIN incident_types t ON t.id=i.incident_type_id WHERE reporter_id=? ORDER BY i.id DESC LIMIT 5",[$u['id']])->fetchAll();
-  $tips=q("SELECT c.title,c.body FROM content c WHERE c.type='tip' ORDER BY RAND() LIMIT 1")->fetch();
+  $tips=q("SELECT c.title,c.body FROM content c WHERE c.type='tip' ORDER BY RANDOM() LIMIT 1")->fetch();
   $att=q("SELECT t.name,a.score,a.total FROM quiz_attempts a JOIN topics t ON t.id=a.topic_id WHERE a.user_id=? ORDER BY a.id DESC LIMIT 3",[$u['id']])->fetchAll(); ?>
 <section class="hero"><h1>Hello, <?=$first?></h1><p>Stay safe online. Learn something new, or report a problem so it gets fixed.</p><a class="btn big" href="report.php">Report an incident</a></section>
 <div class="grid">

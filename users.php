@@ -10,7 +10,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
   }
   header('Location: users.php');exit;
 }
-$us=q("SELECT * FROM users ORDER BY FIELD(role,'admin','technician','staff','student'),username")->fetchAll();
+$us=q("SELECT * FROM users ORDER BY array_position(ARRAY['admin','technician','staff','student'],role::text),username")->fetchAll();
 $title='Users';include 'includes/header.php'; ?>
 <h1>Users and roles</h1>
 <form class="panel row" method="post"><?=csrf()?><input type="hidden" name="action" value="add">

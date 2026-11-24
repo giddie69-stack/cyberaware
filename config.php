@@ -1,12 +1,21 @@
 <?php
 // ---- Settings: change these for your setup ----
-const DB_HOST='sql310.infinityfree.com', DB_NAME='if0_43476235_cyberware', DB_USER='if0_43476235', DB_PASS='Geofrey254';
+// Database: PostgreSQL. On Render set DATABASE_URL (the database's Internal Database URL).
+// Without it, DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASS are used (second value = local default).
+function env($k,$d){$v=getenv($k);return $v===false||$v===''?$d:$v;}
+$dbu=parse_url(env('DATABASE_URL',''))?:[];
+define('DB_HOST',$dbu['host']??env('DB_HOST','localhost'));define('DB_PORT',(int)($dbu['port']??env('DB_PORT','5432')));
+define('DB_NAME',isset($dbu['path'])?ltrim($dbu['path'],'/'):env('DB_NAME','cyberaware'));
+define('DB_USER',isset($dbu['user'])?urldecode($dbu['user']):env('DB_USER','postgres'));
+define('DB_PASS',isset($dbu['pass'])?urldecode($dbu['pass']):env('DB_PASS',''));
+unset($dbu);
 const SYSTEM_NAME='Kenya School of TVET Cybersecurity Awareness and Incident Reporting System';
 // Email (for one-time passwords and password reset). Leave SMTP_USER empty to save emails in the /outbox folder instead (testing).
-const SMTP_HOST='smtp.gmail.com', SMTP_PORT=587, SMTP_USER='', SMTP_PASS='', SMTP_FROM='';
-const SMTP_VERIFY_SSL=true;     // set to false only if test_email.php reports a certificate error on your XAMPP
+define('SMTP_HOST',env('SMTP_HOST','smtp.gmail.com'));define('SMTP_PORT',(int)env('SMTP_PORT','587'));
+define('SMTP_USER',env('SMTP_USER',''));define('SMTP_PASS',env('SMTP_PASS',''));define('SMTP_FROM',env('SMTP_FROM',''));
+define('SMTP_VERIFY_SSL',env('SMTP_VERIFY_SSL','true')!=='false');     // set to false only if test_email.php reports a certificate error on your XAMPP
 // Anyone who registers as Admin or Technician must type this access code. Give it only to ICT staff, and change it.
-const STAFF_ACCESS_CODE='KSTVET-ICT-2026';
+define('STAFF_ACCESS_CODE',env('STAFF_ACCESS_CODE','KSTVET-ICT-2026'));
 const ROLES=['student'=>'Student','staff'=>'Staff','technician'=>'Technician','admin'=>'Admin'];
 const ESCALATE_HOURS_HIGH=2;    // High/Critical reports not received within this many hours alert the admin
 const ESCALATE_HOURS_OTHER=24;
@@ -15,7 +24,7 @@ const SEVERITIES=['Low','Medium','High','Critical'];
 
 session_start();
 require_once __DIR__.'/includes/mailer.php';
-function db(){static $p;if(!$p){$p=new PDO("mysql:host=".DB_HOST.";dbname=".DB_NAME.";charset=utf8mb4",DB_USER,DB_PASS,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);}return $p;}
+function db(){static $p;if(!$p){$p=new PDO("pgsql:host=".DB_HOST.";port=".DB_PORT.";dbname=".DB_NAME,DB_USER,DB_PASS,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);$p->exec("SET TIME ZONE 'Africa/Nairobi'");}return $p;}
 function q($sql,$args=[]){$s=db()->prepare($sql);$s->execute($args);return $s;}
 function h($s){return htmlspecialchars((string)$s,ENT_QUOTES,'UTF-8');}
 function user(){return $_SESSION['user']??null;}
@@ -44,7 +53,7 @@ function tracker($s){
 function suggest_severity($weight,$people){$p=(int)$weight+($people>=10?2:($people>=3?1:0));return $p>=5?'Critical':($p>=4?'High':($p>=2?'Medium':'Low'));}
 // Escalation: reports nobody has received in time alert the admin (runs when the admin opens the home page)
 function run_escalation(){
-  foreach(q("SELECT id,ref,severity FROM incidents WHERE status='Reported' AND escalated=0 AND TIMESTAMPDIFF(HOUR,created_at,NOW())>=IF(severity IN ('High','Critical'),?,?)",[ESCALATE_HOURS_HIGH,ESCALATE_HOURS_OTHER])->fetchAll() as $r){
+  foreach(q("SELECT id,ref,severity FROM incidents WHERE status='Reported' AND escalated=0 AND created_at<=NOW()-make_interval(hours=>CASE WHEN severity IN ('High','Critical') THEN ?::int ELSE ?::int END)",[ESCALATE_HOURS_HIGH,ESCALATE_HOURS_OTHER])->fetchAll() as $r){
     q("UPDATE incidents SET escalated=1 WHERE id=?",[$r['id']]);notify_role(['admin'],"ESCALATION: {$r['ref']} ({$r['severity']}) has not been received yet",'incident.php?id='.$r['id']);}
 }
 
@@ -52,7 +61,7 @@ function run_escalation(){
 function send_code($u,$purpose){
   q("UPDATE otp_codes SET used=1 WHERE user_id=? AND purpose=? AND used=0",[$u['id'],$purpose]);
   $code=sprintf('%06d',random_int(0,999999));
-  q("INSERT INTO otp_codes(user_id,purpose,code_hash,expires_at) VALUES(?,?,?,DATE_ADD(NOW(),INTERVAL 10 MINUTE))",[$u['id'],$purpose,password_hash($code,PASSWORD_DEFAULT)]);
+  q("INSERT INTO otp_codes(user_id,purpose,code_hash,expires_at) VALUES(?,?,?,NOW()+INTERVAL '10 minutes')",[$u['id'],$purpose,password_hash($code,PASSWORD_DEFAULT)]);
   $what=$purpose==='login'?'login code':'password reset code';
   $r=send_mail($u['email'],$u['full_name'],SYSTEM_NAME.': your '.$what,"Hello {$u['full_name']},\n\nYour $what is: $code\n\nIt expires in 10 minutes. If you did not ask for it, ignore this email and do not share the code.\n\n".SYSTEM_NAME);
   if($r==='logged')flash('Email sending is not set up yet, so no email was sent. Add your SMTP details in config.php (see README, step "Real email"). For now the code is in the outbox folder.');
