@@ -6,19 +6,10 @@ CREATE TABLE users(
  id SERIAL PRIMARY KEY,
  username VARCHAR(40) NOT NULL UNIQUE,   -- student or staff ID
  full_name VARCHAR(100) NOT NULL,
- email VARCHAR(100) NOT NULL UNIQUE,     -- used for one-time passwords and password reset
+ email VARCHAR(100) NOT NULL UNIQUE,
  password_hash VARCHAR(255) NOT NULL,
  role VARCHAR(20) NOT NULL DEFAULT 'student' CHECK (role IN ('student','staff','technician','admin')),
  created_at TIMESTAMP(0) DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE otp_codes(
- id SERIAL PRIMARY KEY,
- user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- purpose VARCHAR(10) NOT NULL CHECK (purpose IN ('login','reset')),
- code_hash VARCHAR(255) NOT NULL,
- expires_at TIMESTAMP(0) NOT NULL,
- attempts SMALLINT DEFAULT 0,
- used SMALLINT DEFAULT 0
 );
 CREATE TABLE labs(id SERIAL PRIMARY KEY, name VARCHAR(80) NOT NULL);
 CREATE TABLE incident_types(id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, weight SMALLINT NOT NULL DEFAULT 1);

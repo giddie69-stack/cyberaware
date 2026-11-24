@@ -22,18 +22,14 @@ ENV PORT=10000
 RUN sed -ri 's/Listen 80/Listen ${PORT}/' /etc/apache2/ports.conf \
  && sed -ri 's/<VirtualHost \*:80>/<VirtualHost *:${PORT}>/' /etc/apache2/sites-available/000-default.conf
 
-# Block web access to files that must never be served:
-# outbox/ holds login and reset codes when SMTP is not configured.
+# Block web access to files that must never be served.
 RUN { \
       echo 'ServerTokens Prod'; \
       echo 'ServerSignature Off'; \
-      echo '<Directory /var/www/html/outbox>'; \
-      echo '  Require all denied'; \
-      echo '</Directory>'; \
       echo '<Directory /var/www/html/uploads>'; \
       echo '  php_admin_flag engine off'; \
       echo '</Directory>'; \
-      echo '<FilesMatch "^(install|test_email|init_db)\.php$|\.sql$">'; \
+      echo '<FilesMatch "^(install|init_db)\.php$|\.sql$">'; \
       echo '  Require all denied'; \
       echo '</FilesMatch>'; \
     } > /etc/apache2/conf-available/app-security.conf \
@@ -42,8 +38,8 @@ RUN { \
 WORKDIR /var/www/html
 COPY . .
 
-RUN mkdir -p uploads outbox \
- && chown -R www-data:www-data uploads outbox
+RUN mkdir -p uploads \
+ && chown -R www-data:www-data uploads
 
 EXPOSE 10000
 # Create the database tables on first start, then run Apache

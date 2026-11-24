@@ -10,10 +10,6 @@ define('DB_USER',isset($dbu['user'])?urldecode($dbu['user']):env('DB_USER','post
 define('DB_PASS',isset($dbu['pass'])?urldecode($dbu['pass']):env('DB_PASS',''));
 unset($dbu);
 const SYSTEM_NAME='Kenya School of TVET Cybersecurity Awareness and Incident Reporting System';
-// Email (for one-time passwords and password reset). Leave SMTP_USER empty to save emails in the /outbox folder instead (testing).
-define('SMTP_HOST',env('SMTP_HOST','smtp.gmail.com'));define('SMTP_PORT',(int)env('SMTP_PORT','587'));
-define('SMTP_USER',env('SMTP_USER',''));define('SMTP_PASS',env('SMTP_PASS',''));define('SMTP_FROM',env('SMTP_FROM',''));
-define('SMTP_VERIFY_SSL',env('SMTP_VERIFY_SSL','true')!=='false');     // set to false only if test_email.php reports a certificate error on your XAMPP
 // Anyone who registers as Admin or Technician must type this access code. Give it only to ICT staff, and change it.
 define('STAFF_ACCESS_CODE',env('STAFF_ACCESS_CODE','KSTVET-ICT-2026'));
 const ROLES=['student'=>'Student','staff'=>'Staff','technician'=>'Technician','admin'=>'Admin'];
@@ -23,7 +19,6 @@ const STATUSES=['Reported','Received by Admin','Assigned to Technician','In Prog
 const SEVERITIES=['Low','Medium','High','Critical'];
 
 session_start();
-require_once __DIR__.'/includes/mailer.php';
 function db(){static $p;if(!$p){$p=new PDO("pgsql:host=".DB_HOST.";port=".DB_PORT.";dbname=".DB_NAME,DB_USER,DB_PASS,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);$p->exec("SET TIME ZONE 'Africa/Nairobi'");}return $p;}
 function q($sql,$args=[]){$s=db()->prepare($sql);$s->execute($args);return $s;}
 function h($s){return htmlspecialchars((string)$s,ENT_QUOTES,'UTF-8');}
@@ -57,23 +52,4 @@ function run_escalation(){
     q("UPDATE incidents SET escalated=1 WHERE id=?",[$r['id']]);notify_role(['admin'],"ESCALATION: {$r['ref']} ({$r['severity']}) has not been received yet",'incident.php?id='.$r['id']);}
 }
 
-// ---- One-time codes (login OTP and password reset) ----
-function send_code($u,$purpose){
-  q("UPDATE otp_codes SET used=1 WHERE user_id=? AND purpose=? AND used=0",[$u['id'],$purpose]);
-  $code=sprintf('%06d',random_int(0,999999));
-  q("INSERT INTO otp_codes(user_id,purpose,code_hash,expires_at) VALUES(?,?,?,NOW()+INTERVAL '10 minutes')",[$u['id'],$purpose,password_hash($code,PASSWORD_DEFAULT)]);
-  $what=$purpose==='login'?'login code':'password reset code';
-  $r=send_mail($u['email'],$u['full_name'],SYSTEM_NAME.': your '.$what,"Hello {$u['full_name']},\n\nYour $what is: $code\n\nIt expires in 10 minutes. If you did not ask for it, ignore this email and do not share the code.\n\n".SYSTEM_NAME);
-  if($r==='logged')flash('Email sending is not set up yet, so no email was sent. Add your SMTP details in config.php (see README, step "Real email"). For now the code is in the outbox folder.');
-  elseif($r==='failed')flash('The email could not be sent. Open test_email.php on the host computer to see the exact reason.');
-  return $r;
-}
-function check_code($uid,$purpose,$code){ // true, false, 'expired' or 'locked'
-  $r=q("SELECT * FROM otp_codes WHERE user_id=? AND purpose=? AND used=0 AND expires_at>NOW() ORDER BY id DESC LIMIT 1",[$uid,$purpose])->fetch();
-  if(!$r)return 'expired';if($r['attempts']>=5)return 'locked';
-  q("UPDATE otp_codes SET attempts=attempts+1 WHERE id=?",[$r['id']]);
-  if(password_verify(trim($code),$r['code_hash'])){q("UPDATE otp_codes SET used=1 WHERE id=?",[$r['id']]);return true;}
-  return false;
-}
-function mask_email($e){[$a,$b]=explode('@',$e)+[1=>''];return substr($a,0,2).str_repeat('*',max(2,strlen($a)-2)).'@'.$b;}
-if($_SERVER['REQUEST_METHOD']==='POST'&&(($_POST['csrf']??'')!==($_SESSION['csrf']??'x'))){http_response_code(400);exit('Invalid form token. Go back and reload the page.');}
+if(($_SERVER['REQUEST_METHOD']??'')==='POST'&&(($_POST['csrf']??'')!==($_SESSION['csrf']??'x'))){http_response_code(400);exit('Invalid form token. Go back and reload the page.');}
